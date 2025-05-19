@@ -9,6 +9,7 @@ from fetch import (
     _fetch_auditing_output,
     _fetch_classification_output,
     _fetch_extracted_output,
+    _fetch_table_data,
 )
 from tqdm.asyncio import tqdm
 from utils import parse_html_table_to_csv
@@ -48,10 +49,11 @@ async def process_data(company_name: str, input_file: str, output_file: str, qua
     
     # 테이블 데이터를 auditing 데이터와 함께 저장하기 위한 리스트
     table_data = []
+    table_data_tasks = []
     for i, item in enumerate(data):
         if 'content' in item and "<table>" in item['content']:
             parsed_csv = parse_html_table_to_csv(item['content'])
-            table_data.append({
+            temp_table_data = {
                 "index": i,
                 "title": "table",
                 "value": parsed_csv,
@@ -59,9 +61,11 @@ async def process_data(company_name: str, input_file: str, output_file: str, qua
                 "period": "N/A",
                 "type_": "actual",
                 "category": "financials",
-                "reference": item['content']
-            })
-
+                "reference": parsed_csv
+            }
+            table_data_tasks.append(_fetch_table_data(temp_table_data, company_name, quarter))
+    table_data = await tqdm.gather(*table_data_tasks, desc="Fetching table data")
+    
     # 3. 분류(Categorization) 작업 준비
     auditing_tasks = []
     extracted_data_for_merge = [] # 최종 병합을 위한 추출 데이터 저장
@@ -122,14 +126,18 @@ async def process_data(company_name: str, input_file: str, output_file: str, qua
                 })
                 # 테이블 데이터 먼저 저장
         for table_item in table_data:
-            writer.write(table_item)
+            for metric in table_item:
+                writer.write(metric)
 
     print(f"Classification results saved to {classification_output_file}")
 
-input_path = "/Users/junekwon/Desktop/Projects/extraction_agent/8-k_sample/inseego.json"
-output_path_base = "./result/inseego_improved_results.jsonl" 
+from pathlib import Path
 
-quarter = "2020 4Q"
-name = "Inseego"
+base_path = str(Path(__file__).parent)
+input_path = base_path + "/8-k_sample/chipole.json"
+output_path_base = base_path + "/result/chipole_improved_results.jsonl"
+
+quarter = "2023 4Q"
+name = "chipole"
 
 asyncio.run(process_data(name, input_path, output_path_base, quarter))

@@ -11,6 +11,7 @@ from messages import (
     get_kpi_classification_messages,
     get_kpi_extracting_messages,
     get_quote_relevance_messages,
+    get_table_extracting_messages,
 )
 from pydantic import BaseModel
 from tqdm.asyncio import tqdm_asyncio
@@ -42,6 +43,17 @@ class QuoteRelevanceOutput(BaseModel):
 
 class KoreanTranslationOutput(BaseModel):
     translation: str
+
+class TableCellOutput(BaseModel):
+    title: str
+    value: str
+    unit: str
+    period: str
+    type_: str
+    category: str
+    
+class TableDataOutput(BaseModel):
+    data: List[TableCellOutput]
 
 async def fetch_parsed(
         messages: List[Dict[str, str]],
@@ -189,3 +201,47 @@ async def _fetch_quote_relevance_output(
         print(f"An Error occurred while processing quote relevance: {e}")
         traceback.print_exc()
         return [], []
+
+# TODO: fetch table data from markdown table
+
+async def _fetch_table_data(
+    table_data: Dict,
+    company_name: str,
+    quarter: str,
+) -> List[Dict]:
+    """
+    Extracts structured data from a markdown table using LLM.
+    
+    Args:
+        table_data (Dict): Dictionary containing table data
+        
+    Returns:
+        List[Dict]: List of dictionaries containing extracted table data
+    """
+    try:
+        raw_table_data = table_data.get('value', '')
+        messages = get_table_extracting_messages(company_name, raw_table_data, quarter)
+        
+        table_output, _ = await fetch_parsed(
+            messages=messages, response_format=TableDataOutput
+        )
+        result = []
+        for metric in table_output.model_dump()["data"]:
+            if metric.get('value', '').strip() and metric.get('value', '').strip() != 'None':
+                result.append({
+                    "index": table_data.get('index', ''),
+                    "category": metric.get('category', '').strip(),
+                    "title": metric.get('title', '').strip(),
+                    "value": metric.get('value', '').strip(),
+                    "unit": metric.get('unit', '').strip(),
+                    "period": metric.get('period', '').strip(),
+                    "type_": metric.get('type_', '').strip(),
+                    "reference": table_data.get('reference', '')
+                })
+        return result
+    except Exception as e:
+        print(f"An Error occurred while processing table data: {e}")
+        traceback.print_exc()
+        return []
+
+
