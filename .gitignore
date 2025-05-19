@@ -1,0 +1,6 @@
+annotations/*
+earnings_sample/*
+result/*
+misc/*
+.env
+.idea/*
