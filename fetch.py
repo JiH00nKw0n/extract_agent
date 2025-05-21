@@ -165,7 +165,8 @@ async def _fetch_auditing_output(
 async def _fetch_classification_output(
         result: Dict,
 ) -> Dict:
-    messages = get_kpi_classification_messages(result)
+    line = result.get('reference', '')
+    messages = get_kpi_classification_messages(line)
 
     try:
         classification_output, _ = await fetch_parsed(
@@ -319,46 +320,3 @@ async def _fetch_table_data_cellwise(
         print(f"An Error occurred while processing table data cellwise for metric '{metric_data.get('title', '')}': {e}")
         traceback.print_exc()
         return []
-
-#  DEPRECATED
-# async def _fetch_table_data(
-#     table_data: Dict,
-#     company_name: str,
-#     quarter: str,
-# ) -> List[Dict]:
-#     """
-#     Extracts structured data from a markdown table using LLM.
-    
-#     Args:
-#         table_data (Dict): Dictionary containing table data
-        
-#     Returns:
-#         List[Dict]: List of dictionaries containing extracted table data
-#     """
-#     try:
-#         raw_table_data = table_data.get('value', '')
-#         messages = get_table_extracting_messages(company_name, raw_table_data, quarter)
-        
-#         table_output, _ = await fetch_parsed(
-#             messages=messages, response_format=TableDataOutput, top_p = 0.1
-#         )
-#         result = []
-#         for metric in table_output.model_dump()["data"]:
-#             if metric.get('value', '').strip() and metric.get('value', '').strip() != 'None':
-#                 result.append({
-#                     "index": table_data.get('index', ''),
-#                     "category": metric.get('category', '').strip(),
-#                     "title": metric.get('title', '').strip(),
-#                     "value": metric.get('value', '').strip(),
-#                     "unit": metric.get('unit', '').strip(),
-#                     "period": metric.get('period', '').strip(),
-#                     "type_": metric.get('type_', '').strip(),
-#                     "reference": table_data.get('reference', '')
-#                 })
-#         return result
-#     except Exception as e:
-#         print(f"An Error occurred while processing table data: {e}")
-#         traceback.print_exc()
-#         return []
-
-
