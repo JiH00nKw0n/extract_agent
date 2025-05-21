@@ -42,9 +42,8 @@ async def process_data(company_name: str, input_file: str, output_file: str, qua
     for i, item in enumerate(data):
         if 'content' in item and "<table>" not in item['content']:
             # 각 태스크와 해당 태스크의 원본 인덱스 및 content(chunk)를 저장
-            # tasks.append(_fetch_extracted_output(company_name, item['content'], quarter))
-            # original_indices_and_content.append((i, item['content']))
-            pass
+            tasks.append(_fetch_extracted_output(company_name, item['content'], quarter))
+            original_indices_and_content.append((i, item['content']))
         
     # 2. 추출 작업 병렬 실행 및 결과 수집
     all_extracted_results = await tqdm.gather(*tasks, desc="Fetching extracted output")
