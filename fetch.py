@@ -12,6 +12,8 @@ from messages import (
     get_kpi_extracting_messages,
     get_quote_relevance_messages,
     get_table_extracting_messages,
+    get_table_rowwise_messages,
+    get_table_cellwise_messages,
 )
 from pydantic import BaseModel
 from tqdm.asyncio import tqdm_asyncio
@@ -44,6 +46,22 @@ class QuoteRelevanceOutput(BaseModel):
 class KoreanTranslationOutput(BaseModel):
     translation: str
 
+class MetricOutput(BaseModel):
+    title: str
+    unit: str
+    type_: str
+    category: str
+
+class MetricListOutput(BaseModel):
+    data: List[MetricOutput]
+
+class CellOutput(BaseModel):
+    value: str
+    period: str
+    
+class CellListOutput(BaseModel):
+    data: List[CellOutput]
+
 class TableCellOutput(BaseModel):
     title: str
     value: str
@@ -51,7 +69,7 @@ class TableCellOutput(BaseModel):
     period: str
     type_: str
     category: str
-    
+
 class TableDataOutput(BaseModel):
     data: List[TableCellOutput]
 
@@ -202,46 +220,145 @@ async def _fetch_quote_relevance_output(
         traceback.print_exc()
         return [], []
 
-# TODO: fetch table data from markdown table
 
-async def _fetch_table_data(
+async def _fetch_table_data_rowwise(
     table_data: Dict,
     company_name: str,
     quarter: str,
 ) -> List[Dict]:
     """
-    Extracts structured data from a markdown table using LLM.
+    Extracts metric information from table rows.
+    Identifies all metrics (rows) in the table and their metadata.
     
     Args:
         table_data (Dict): Dictionary containing table data
         
     Returns:
-        List[Dict]: List of dictionaries containing extracted table data
+        List[Dict]: List of dictionaries containing extracted metric information
     """
     try:
-        raw_table_data = table_data.get('value', '')
-        messages = get_table_extracting_messages(company_name, raw_table_data, quarter)
+        raw_table_data = table_data.get('reference', '')
+        messages = get_table_rowwise_messages(company_name, raw_table_data, quarter)
         
         table_output, _ = await fetch_parsed(
-            messages=messages, response_format=TableDataOutput
+            messages=messages, response_format=MetricListOutput, top_p = 0.1, timeout = 100
         )
         result = []
         for metric in table_output.model_dump()["data"]:
-            if metric.get('value', '').strip() and metric.get('value', '').strip() != 'None':
+            if metric.get('title', '').strip() and metric.get('title', '').lower().strip() != 'none':
                 result.append({
                     "index": table_data.get('index', ''),
                     "category": metric.get('category', '').strip(),
                     "title": metric.get('title', '').strip(),
-                    "value": metric.get('value', '').strip(),
                     "unit": metric.get('unit', '').strip(),
-                    "period": metric.get('period', '').strip(),
                     "type_": metric.get('type_', '').strip(),
                     "reference": table_data.get('reference', '')
                 })
         return result
     except Exception as e:
-        print(f"An Error occurred while processing table data: {e}")
+        print(f"An Error occurred while processing table data rowwise: {e}")
         traceback.print_exc()
         return []
+
+async def _fetch_table_data_cellwise(
+    metric_data: Dict,
+    company_name: str,
+    quarter: str,
+) -> List[Dict]:
+    """
+    Extracts cell values and periods for a specific metric.
+    Takes a single metric as input and extracts all values and periods for this metric.
+    
+    Args:
+        metric_data (Dict): Dictionary containing information about a single metric
+                           (includes title, unit, type_, category, reference)
+        
+    Returns:
+        List[Dict]: List of dictionaries containing extracted values and periods for the metric
+    """
+    try:
+        raw_table_data = metric_data.get('reference', '')
+        metric_title = metric_data.get('title', '')
+        metric_unit = metric_data.get('unit', '')
+        metric_type = metric_data.get('type_', '')
+        metric_category = metric_data.get('category', '')
+        
+        # Pass the specific metric information to the prompt
+        messages = get_table_cellwise_messages(
+            company_name=company_name,
+            table_data=raw_table_data,
+            quarter=quarter,
+            metric_title=metric_title,
+            metric_unit=metric_unit,
+            metric_type=metric_type,
+            metric_category=metric_category
+        )
+        
+        table_output, _ = await fetch_parsed(
+            messages=messages, response_format=CellListOutput, top_p = 0.1
+        )   
+        result = []
+        
+        # Process each cell value and period extracted for this specific metric
+        for cell in table_output.model_dump()["data"]:
+            added_cell = set()
+            if cell.get('value', '').strip() and cell.get('value', '').lower().strip() != 'none' and (cell.get('value', ''), cell.get('period', '')) not in added_cell:
+                result.append({
+                    "index": metric_data.get('index', ''),
+                    "category": metric_category,
+                    "title": metric_title,
+                    "value": cell.get('value', '').strip(),
+                    "unit": metric_unit,
+                    "period": cell.get('period', '').strip(),
+                    "type_": metric_type,
+                    "reference": metric_data.get('reference', '')
+                })
+                added_cell.add((cell.get('value', ''), cell.get('period', '')))
+        return result
+    except Exception as e:
+        print(f"An Error occurred while processing table data cellwise for metric '{metric_data.get('title', '')}': {e}")
+        traceback.print_exc()
+        return []
+
+#  DEPRECATED
+# async def _fetch_table_data(
+#     table_data: Dict,
+#     company_name: str,
+#     quarter: str,
+# ) -> List[Dict]:
+#     """
+#     Extracts structured data from a markdown table using LLM.
+    
+#     Args:
+#         table_data (Dict): Dictionary containing table data
+        
+#     Returns:
+#         List[Dict]: List of dictionaries containing extracted table data
+#     """
+#     try:
+#         raw_table_data = table_data.get('value', '')
+#         messages = get_table_extracting_messages(company_name, raw_table_data, quarter)
+        
+#         table_output, _ = await fetch_parsed(
+#             messages=messages, response_format=TableDataOutput, top_p = 0.1
+#         )
+#         result = []
+#         for metric in table_output.model_dump()["data"]:
+#             if metric.get('value', '').strip() and metric.get('value', '').strip() != 'None':
+#                 result.append({
+#                     "index": table_data.get('index', ''),
+#                     "category": metric.get('category', '').strip(),
+#                     "title": metric.get('title', '').strip(),
+#                     "value": metric.get('value', '').strip(),
+#                     "unit": metric.get('unit', '').strip(),
+#                     "period": metric.get('period', '').strip(),
+#                     "type_": metric.get('type_', '').strip(),
+#                     "reference": table_data.get('reference', '')
+#                 })
+#         return result
+#     except Exception as e:
+#         print(f"An Error occurred while processing table data: {e}")
+#         traceback.print_exc()
+#         return []
 
 
