@@ -1,5 +1,9 @@
 from typing import Dict, List
 
+######
+# DATA EXTRACTION
+######
+
 _SYSTEM_KPI_EXTRACT_PROMPT = f"""
 <task>
 You are a financial analyst reviewing an 8-K report of a specific firm.
@@ -235,6 +239,10 @@ def get_kpi_classification_messages(line: str) -> List[Dict[str, str]]:
     return messages
 
 
+######
+# DATA ANNOTATION: Quote Relevance
+######
+
 _SYSTEM_QUOTE_RELEVANCE_PROMPT_FILTER = f"""
 <task>
 You are tasked with identifying the index of the quote from the provided data that is most relevant to answering the given question.
@@ -267,83 +275,6 @@ Example Output:
 ```json
 {{
     "index": most relevant quote's index (or -1 if no relevant quote is found)
-}}
-```
-</output_format>
-"""
-
-
-_SYSTEM_QUOTE_RELEVANCE_PROMPT_FILTER_V2 = f"""
-<task>
-You are tasked with identifying the index of the quote from the provided data that is meaningfully related to answering the given question.
-Analyze the question carefully to understand what information is sought.
-Then, review the numbered list of quotes and select the index of the single quote that is most meaningfully connected to the question — even if the connection is partial or indirect.
-Your goal is to find a quote that helps address the question in some way, not necessarily one that fully or directly answers it.
-</task>
-
-<input_format>
-The input consists of:
-1.  A "question" seeking specific information.
-2.  "data" containing a numbered list of quotes, formatted like:
-    1. <Quote 1 text>
-    2. <Quote 2 text>
-    ...
-    N. <Quote N text>
-</input_format>
-
-<analysis_steps>
-1.  **Understand the Question:** Carefully analyze the user's question to understand its main intent. Identify key concepts, entities, events, metrics, or context.
-2.  **Review Quotes Broadly:** Read through each quote, considering not just direct answers but also quotes that share related topics, contexts, processes, or adjacent concepts.
-3.  **Assess Relevance Generously:** 
-    - Treat a quote as relevant if it addresses the same subject area, even partially or indirectly.
-    - If a quote touches on related aspects, background information, or contributing factors, it should still be considered related.
-4.  **Select the Best Match:** Choose the index of the quote that provides the most meaningful help toward answering the question, even if the support is partial or the link is indirect.
-5.  **Handle No Relevance Carefully:** Only return -1 if absolutely no quote has **any reasonable** connection to the question. If there is any plausible relation — even if slight — select the best matching quote.
-</analysis_steps>
-
-<output_format>
-Return your output as a JSON object containing a single key "index" with the integer index of the most relevant quote as its value. If no quote is relevant or no quote adequately answers the question, the value should be -1.
-
-Example Output:
-```json
-{{
-    "index": most relevant quote's index (or -1 if no relevant quote is found)
-}}
-```
-</output_format>
-"""
-
-_SYSTEM_QUOTE_RELEVANCE_PROMPT_NONFILTER = f"""
-<task>
-You are tasked with identifying the index of the quote from the provided data that is most relevant to answering the given question.
-Analyze the question deeply to understand the specific information needed.
-Then, review the numbered list of quotes in the data and select the index of the single quote that best relates to the question.
-</task>
-
-<input_format>
-The input consists of:
-1.  A "question" seeking specific information.
-2.  "data" containing a numbered list of quotes, formatted like:
-    1. <Quote 1 text>
-    2. <Quote 2 text>
-    ...
-    N. <Quote N text>
-</input_format>
-
-<analysis_steps>
-1.  **Understand the Question:** Carefully analyze the user's question to determine the core information being sought. Identify key entities, concepts, timeframes, or metrics mentioned.
-2.  **Evaluate Quotes:** Read through each numbered quote provided in the data.
-3.  **Assess Relevance:** For each quote, determine how directly and completely it answers the analyzed question.
-4.  **Select Best Match:** Choose the index (the number preceding the quote) of the single quote that provides the most relevant information to answer the question. If multiple quotes seem relevant, select the one that is most directly and comprehensively related to the question's core inquiry.
-</analysis_steps>
-
-<output_format>
-Return your output as a JSON object containing a single key "index" with the integer index of the most relevant quote as its value.
-
-Example Output:
-```json
-{{
-    "index": most relevant quote's index
 }}
 ```
 </output_format>
@@ -393,7 +324,6 @@ Return your output as a JSON object containing a single key "translation" with t
 </output_format>
 """
 
-
 _USER_KOREAN_TRANSLATION_PROMPT = """
 Please translate the following text into Korean.
 
@@ -401,6 +331,7 @@ Please translate the following text into Korean.
 {text}
 </text>
 """
+
 
 def get_korean_translation_messages(text: str) -> List[Dict[str, str]]:
     """
