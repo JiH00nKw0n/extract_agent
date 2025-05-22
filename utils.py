@@ -311,7 +311,7 @@ def parse_html_table_to_csv(raw_html: str) -> str:
             colspan = int(cell.get("colspan", 1))
             row_data.extend([text] * colspan)
         # pass if no text in the row
-        if not any(row_data):
+        if all([cell.strip() in ['', '\ufeff', '\ufffd'] for cell in row_data]):
             continue
         writer.append(row_data)
 
@@ -346,17 +346,17 @@ def parse_html_table_to_csv(raw_html: str) -> str:
     
     # Remove rows where all cells are empty or just spaces
     filtered_rows = []
-    for row in markdown_table:
+    for i, row in enumerate(markdown_table):
         cells = row.split('|')[1:-1]  # Remove the first and last empty elements
         cells = [cell.strip() for cell in cells]
         
-        # Skip separator row (contains only "---")
-        if all(cell == "---" for cell in cells):
+        # Skip separator row (contains only "---", for the first row)
+        if i == 0 or all(cell == "---" for cell in cells):
             filtered_rows.append(row)
             continue
             
         # Check if row has at least one non-empty cell
-        if any(cell and cell != " " for cell in cells):
+        if any(cell and not any(c in cell for c in ['\ufeff', '\ufffd', " "]) for cell in cells):
             filtered_rows.append(row)
     
     # Check for empty columns

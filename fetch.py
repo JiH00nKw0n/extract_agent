@@ -11,7 +11,6 @@ from messages import (
     get_kpi_classification_messages,
     get_kpi_extracting_messages,
     get_quote_relevance_messages,
-    get_table_extracting_messages,
     get_table_rowwise_messages,
     get_table_cellwise_messages,
 )

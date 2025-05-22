@@ -458,8 +458,8 @@ This is the first stage of a two-stage extraction process where your goal is to 
     *   The category should be one of the following: "Financials", "KPI", "Guidance", "Unclear".
     *   Definitions of the categories are as follows:
         - **Financials:** Standard financial statement items (Revenue, Income, EPS, etc.) representing actual historical results.
-        - **KPI:** Specific performance metrics (customer growth, ARPU, segment revenues) that can be financial or non-financial.
-        - **Guidance:** Forward-looking statements about future performance, often using terms like "expect," etc.
+        - **KPI:** Sector-specific performance metrics about (customer growth, ARPU, segment revenues) that can be financial or non-financial.
+        - **Guidance:** Forward-looking statements about future performance, often using terms like "expect," "guidance," etc.
 7.  **TIP:**
     *   Since the input table is created by horizontally splitting merged cells, you should examine horizontally adjacent multiple cells 
         and concatenate them to form the complete value.
@@ -551,8 +551,8 @@ This is the second stage of a two-stage extraction process, where you are given 
         Refer to the last non-null column header to determine the period.
     *   Since the input table is created by horizontally splitting merged cells, you should examine horizontally adjacent multiple cells 
         and concatenate them to form the complete value.
-    *   Output data should contain values for distinct periods. 
-        If the same period is mentioned multiple times, return only the first occurrence.
+    *   Output data might contain values in duplicated (metric, period, value) tuples for multiple cells.
+        Only return distinct values for (metric, period, value) tuples.
 </guideline>
 
 <format>

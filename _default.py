@@ -5,7 +5,7 @@ from openai.types.chat import (
 )
 
 DEFAULT_OPENAI_KWARGS = {
-    "model": "gpt-4.1-nano-2025-04-14",
+    "model": "gpt-4.1-mini",
     "temperature": 0.0,
     "timeout": 30.0,
 }
