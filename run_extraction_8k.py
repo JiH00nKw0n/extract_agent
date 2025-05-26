@@ -9,6 +9,8 @@ from fetch import (
     _fetch_auditing_output,
     _fetch_classification_output,
     _fetch_extracted_output,
+    _fetch_table_data_rowwise,
+    _fetch_table_data_cellwise,
 )
 from tqdm.asyncio import tqdm
 from utils import parse_html_table_to_csv
@@ -42,26 +44,55 @@ async def process_data(company_name: str, input_file: str, output_file: str, qua
             # 각 태스크와 해당 태스크의 원본 인덱스 및 content(chunk)를 저장
             tasks.append(_fetch_extracted_output(company_name, item['content'], quarter))
             original_indices_and_content.append((i, item['content']))
-
+        
     # 2. 추출 작업 병렬 실행 및 결과 수집
     all_extracted_results = await tqdm.gather(*tasks, desc="Fetching extracted output")
     
-    # 테이블 데이터를 auditing 데이터와 함께 저장하기 위한 리스트
+    # 두 단계로 테이블 데이터를 처리: 1) row별 metric 추출, 2) cell별 값 추출
     table_data = []
+    # 1단계: 테이블에서 metric 리스트 추출
+    row_extraction_tasks = []
+    metrics_by_table_index = {}  # 테이블 인덱스 별 metrics 저장
+    
     for i, item in enumerate(data):
         if 'content' in item and "<table>" in item['content']:
             parsed_csv = parse_html_table_to_csv(item['content'])
-            table_data.append({
+            temp_table_data = {
                 "index": i,
-                "title": "table",
-                "value": parsed_csv,
-                "unit": "N/A",
-                "period": "N/A",
-                "type_": "actual",
-                "category": "financials",
-                "reference": item['content']
-            })
-
+                "reference": parsed_csv
+            }
+            row_extraction_tasks.append(_fetch_table_data_rowwise(temp_table_data, company_name, quarter))
+            metrics_by_table_index[i] = []  # 빈 리스트로 초기화
+    
+    # Row 추출 작업 실행
+    row_results = await tqdm.gather(*row_extraction_tasks, desc="Extracting metrics from tables")
+    
+    # 각 테이블에서 추출된 metrics를 테이블 인덱스 별로 저장
+    for idx, metrics in enumerate(row_results):
+        table_index = list(metrics_by_table_index.keys())[idx]
+        metrics_by_table_index[table_index] = metrics
+    
+    # 2단계: 각 metric에 대해 cell 값 추출
+    cell_extraction_tasks = []
+    
+    for table_idx, metrics in metrics_by_table_index.items():
+        for metric in metrics:
+            # 테이블 데이터에서 추출된 metric에 대해 cell 값 추출 작업 생성
+            original_table_data = next((item['content'] for i, item in enumerate(data) if i == table_idx and 'content' in item), "")
+            metric_with_reference = {
+                **metric,
+                "index": table_idx,
+                "reference": parse_html_table_to_csv(original_table_data)
+            }
+            cell_extraction_tasks.append(_fetch_table_data_cellwise(metric_with_reference, company_name, quarter))
+    
+    # Cell 추출 작업 실행
+    cell_results = await tqdm.gather(*cell_extraction_tasks, desc="Extracting values from table cells")
+    
+    # 모든 cell 결과를 하나의 리스트로 병합
+    for cells in cell_results:
+        table_data.extend(cells)
+    
     # 3. 분류(Categorization) 작업 준비
     auditing_tasks = []
     extracted_data_for_merge = [] # 최종 병합을 위한 추출 데이터 저장
@@ -120,16 +151,37 @@ async def process_data(company_name: str, input_file: str, output_file: str, qua
                 "type_": result['type_'],
                 "reference": result['reference']
                 })
-                # 테이블 데이터 먼저 저장
-        for table_item in table_data:
-            writer.write(table_item)
+        # 테이블 데이터 먼저 저장
+        # Print table data for debugging
+        print("Table data structure:", type(table_data))
+        print("Table data length:", len(table_data))
+        if len(table_data) > 0:
+            print("First table item type:", type(table_data[0]))
+            # Check if table_data is a list of lists or list of dicts
+            if isinstance(table_data[0], list):
+                for table_item in table_data:
+                    for metric in table_item:
+                        if isinstance(metric, dict):
+                            writer.write(metric)
+                        else:
+                            print(f"Warning: Non-dict metric found: {type(metric)}")
+            else:
+                # If table_data is a flat list of metrics
+                for metric in table_data:
+                    if isinstance(metric, dict):
+                        writer.write(metric)
+                    else:
+                        print(f"Warning: Non-dict metric found: {type(metric)}")
 
     print(f"Classification results saved to {classification_output_file}")
 
-input_path = "/Users/junekwon/Desktop/Projects/extraction_agent/8-k_sample/inseego.json"
-output_path_base = "./result/inseego_improved_results.jsonl" 
+from pathlib import Path
 
-quarter = "2020 4Q"
-name = "Inseego"
+base_path = str(Path(__file__).parent)
+input_path = base_path + "/8-k_sample/chipole.json"
+output_path_base = base_path + "/result/chipole_improved_results.jsonl"
+
+quarter = "2023 4Q"
+name = "chipole"
 
 asyncio.run(process_data(name, input_path, output_path_base, quarter))

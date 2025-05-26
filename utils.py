@@ -3,6 +3,7 @@ import io
 import json
 import logging
 import os
+import re
 from datetime import datetime
 from typing import Any, Dict, List, Set
 
@@ -268,18 +269,133 @@ def parse_html_table_to_csv(raw_html: str) -> str:
     if not table:
         return ""
 
-    output = io.StringIO()
-    writer = csv.writer(output)
+    writer = []
 
     for row in table.find_all("tr"):
         row_data = []
         for cell in row.find_all(["td", "th"]):
-            text = cell.get_text(strip=True)
+            # Get text with indentation preserved
+            text = cell.get_text(strip=False)
+            
+            # Extract indentation from style attribute if available
+            indent_px = 0
+            style = cell.get("style", "")
+            if style:
+                # Look for padding-left or padding values in the style
+                padding_match = re.search(r'padding:.*?(\d+(?:\.\d+)?)(pt|px).*?;', style)
+                if not padding_match:
+                    padding_match = re.search(r'padding-left:.*?(\d+(?:\.\d+)?)(pt|px)', style)
+                
+                if padding_match:
+                    value = float(padding_match.group(1))
+                    unit = padding_match.group(2)
+                    # Convert pt to px if needed (approximately)
+                    if unit == 'pt':
+                        value = value * 1.33
+                    indent_px = int(value)
+            
+            # Calculate leading spaces from the text as well
+            leading_spaces = len(text) - len(text.lstrip())
+            
+            # Use the larger of the two indentation values
+            effective_indent = max(leading_spaces, indent_px)  # Approximate conversion to space count
+            
+            if effective_indent > 0:
+                text = "&nbsp;" * effective_indent + text.lstrip()
+            else:
+                text = text.lstrip()
+                
+            # Strip trailing whitespace
+            text = text.rstrip()
+            # Handle colspan
             colspan = int(cell.get("colspan", 1))
-            row_data.extend([text] * colspan)  # Handle colspan
-        writer.writerow(row_data)
+            row_data.extend([text] * colspan)
+        # pass if no text in the row
+        if all([cell.strip() in ['', '\ufeff', '\ufffd'] for cell in row_data]):
+            continue
+        writer.append(row_data)
 
-    return output.getvalue()
+
+    if not writer:
+        return ""
+    
+    # Create markdown table
+    markdown_table = []
+    
+    # Process each row
+    for i, line in enumerate(writer):
+        # Split the line into cells
+        cells = line
+            
+        # Format cells for markdown (replace empty cells with spaces and deduplicate consecutive identical values)
+        formatted_cells = []
+        prev_cell = None
+        for cell in cells:
+            if cell == prev_cell:
+                formatted_cells.append(" ")
+            else:
+                formatted_cells.append(cell if cell else " ")
+                prev_cell = cell
+        row = "| " + " | ".join(formatted_cells) + " |"
+        markdown_table.append(row)
+        
+        # Add header separator after the first row
+        if i == 0:
+            separator = "| " + " | ".join(["---"] * len(cells)) + " |"
+            markdown_table.append(separator)
+    
+    # Remove rows where all cells are empty or just spaces
+    filtered_rows = []
+    for i, row in enumerate(markdown_table):
+        cells = row.split('|')[1:-1]  # Remove the first and last empty elements
+        cells = [cell.strip() for cell in cells]
+        
+        # Skip separator row (contains only "---", for the first row)
+        if i == 0 or all(cell == "---" for cell in cells):
+            filtered_rows.append(row)
+            continue
+            
+        # Check if row has at least one non-empty cell
+        if any(cell and not any(c in cell for c in ['\ufeff', '\ufffd', " "]) for cell in cells):
+            filtered_rows.append(row)
+    
+    # Check for empty columns
+    if filtered_rows:
+        # Get the number of columns from the separator row
+        separator_idx = next((i for i, row in enumerate(filtered_rows) if "---" in row), -1)
+        if separator_idx != -1:
+            num_cols = len(filtered_rows[separator_idx].split('|')) - 2  # -2 for the empty elements at start/end
+            
+            # Check each column
+            empty_col_indices = []
+            for col_idx in range(num_cols):
+                is_empty = True
+                for row_idx, row in enumerate(filtered_rows):
+                    if "---" in row:  # Skip separator row
+                        continue
+                    cells = row.split('|')[1:-1]
+                    if col_idx < len(cells) and cells[col_idx].strip() and cells[col_idx].strip() != " ":
+                        is_empty = False
+                        break
+                if is_empty:
+                    empty_col_indices.append(col_idx)
+            
+            # Remove empty columns
+            if empty_col_indices:
+                new_rows = []
+                for row in filtered_rows:
+                    cells = row.split('|')[1:-1]
+                    new_cells = [cells[i] for i in range(len(cells)) if i not in empty_col_indices]
+                    new_row = "| " + " | ".join(new_cells) + " |"
+                    new_rows.append(new_row)
+                filtered_rows = new_rows
+    
+    markdown_table = filtered_rows
+    
+    # Join all rows into a single string
+    markdown_output = "\n".join(markdown_table)
+
+    return markdown_output
 
 def chunk_10k_10q_html(text: str) -> Dict[int, str]:
     """
