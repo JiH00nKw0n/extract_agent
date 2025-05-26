@@ -3,6 +3,9 @@ import logging
 import traceback
 from typing import Dict, List, Tuple, Type
 
+from pydantic import BaseModel
+from tqdm.asyncio import tqdm_asyncio
+
 from _default import DEFAULT_DATABRICKS_KWARGS, DEFAULT_OPENAI_KWARGS
 from api_fetcher import AsyncDatabricksAPIFetcher, AsyncOpenAIAPIFetcher
 from messages import (
@@ -14,8 +17,7 @@ from messages import (
     get_table_rowwise_messages,
     get_table_cellwise_messages,
 )
-from pydantic import BaseModel
-from tqdm.asyncio import tqdm_asyncio
+from messages_relevance import get_chunk_relevance_messages
 from utils import get_sentences
 
 BaseModelType = Type[BaseModel]
@@ -41,6 +43,10 @@ class CategoryOutput(BaseModel):
 
 class QuoteRelevanceOutput(BaseModel):
     index: int
+    
+class ChunkRelevanceOutput(BaseModel):
+    reasoning: str
+    related: bool
 
 class KoreanTranslationOutput(BaseModel):
     translation: str
@@ -220,7 +226,6 @@ async def _fetch_quote_relevance_output(
         traceback.print_exc()
         return [], []
 
-
 async def _fetch_table_data_rowwise(
     table_data: Dict,
     company_name: str,
@@ -319,3 +324,22 @@ async def _fetch_table_data_cellwise(
         print(f"An Error occurred while processing table data cellwise for metric '{metric_data.get('title', '')}': {e}")
         traceback.print_exc()
         return []
+
+async def _fetch_chunk_relevance_output(
+        question: str,
+        chunk: str,
+) -> bool:
+    messages = get_chunk_relevance_messages(question, chunk)
+
+    try:
+        chunk_relevance_output, _ = await fetch_parsed(
+            messages=messages, response_format=ChunkRelevanceOutput
+        )
+        relevance = chunk_relevance_output.model_dump()["related"]
+        
+        return relevance
+    except Exception as e:
+        print(f"An Error occurred while processing chunk relevance: {e}")
+        traceback.print_exc()
+        return True
+
