@@ -5,27 +5,26 @@ from openai import OpenAI
 
 load_dotenv()
 
-# How to get your Databricks token: https://docs.databricks.com/en/dev-tools/auth/pat.html
-DATABRICKS_TOKEN = os.getenv("DATABRICKS_TOKEN")
+from utils import get_chunk
 
-client = OpenAI(
-  api_key=DATABRICKS_TOKEN,
-  base_url="https://dbc-449ecea5-a3a3.cloud.databricks.com/serving-endpoints"
-)
+file_path = "/Users/junekwon/Desktop/Projects/extraction_agent/annotations/sbux/10-k.html"
 
-chat_completion = client.chat.completions.create(
-  messages=[
-  {
-    "role": "system",
-    "content": "You are an AI assistant"
-  },
-  {
-    "role": "user",
-    "content": "Tell me about Large Language Models"
-  }
-  ],
-  model="databricks-meta-llama-3-3-70b-instruct",
-  max_tokens=256
-)
+with open(file_path, 'r', encoding='utf-8') as f:
+    file_content = f.read()
 
-print(chat_completion.choices[0].message.content)
+chunks = get_chunk(file_content, "10-K")
+
+print(chunks[110])
+print("--------------------------------")
+print(chunks[111])
+print("--------------------------------")
+print(chunks[112])
+print("--------------------------------")
+print(chunks[113])
+print("--------------------------------")
+print(chunks[114])
+print("--------------------------------")
+print(chunks[115])
+print("--------------------------------")
+print(chunks[116])
+print("--------------------------------")
