@@ -53,9 +53,24 @@ async def process_data(company_name: str, input_file: str, output_file: str, qua
     # 1단계: 테이블에서 metric 리스트 추출
     row_extraction_tasks = []
     metrics_by_table_index = {}  # 테이블 인덱스 별 metrics 저장
-    
+    # INSERT_YOUR_CODE
+    # input_file에서 .json 말고 .html로 읽은 다음에 table 태그 달린 것만 가져오고싶어
+
+    # HTML 파일 읽기
+    input_file = input_file.replace('.json', '.html')
+    with open(input_file, 'r', encoding='utf-8') as f:
+        html_content = f.read()
+
+    # table 태그가 포함된 부분만 추출
+    import re
+    table_chunks = re.findall(r'(<table.*?>.*?</table>)', html_content, re.DOTALL | re.IGNORECASE)
+
+    # data를 table 태그가 달린 부분만으로 재구성
+    data = []
+    for chunk in table_chunks:
+        data.append({'content': chunk})
     for i, item in enumerate(data):
-        if 'content' in item and "<table>" in item['content']:
+        if 'content' in item and "<table" in item['content']:
             parsed_csv = parse_html_table_to_csv(item['content'])
             temp_table_data = {
                 "index": i,
@@ -178,10 +193,10 @@ async def process_data(company_name: str, input_file: str, output_file: str, qua
 from pathlib import Path
 
 base_path = str(Path(__file__).parent)
-input_path = base_path + "/8-k_sample/chipole.json"
-output_path_base = base_path + "/result/chipole_improved_results.jsonl"
+input_path = base_path + "/8-k_sample/2014Q4.json"
+output_path_base = base_path + "/result/2014Q4_improved_results.jsonl"
 
-quarter = "2023 4Q"
-name = "chipole"
+quarter = "2014 4Q"
+name = "chipotle"
 
 asyncio.run(process_data(name, input_path, output_path_base, quarter))
