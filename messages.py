@@ -372,6 +372,10 @@ This is the first stage of a two-stage extraction process where your goal is to 
         (e.g., "Total Revenue" in row header and column separated by "actual" and "percentage of total" -> two metrics: "Total Revenue" and "Total Revenue (percentage)")
     *   Clarify the hierachy among row headers then generate representative title for each row.
         (e.g., "Revenue:" in row header without values in the row and Segment names in row headers below. -> "Segment name Revenue")
+    *   If the same metric is broken down into different sectors or segments, extract the title as "{{Segment name}} {{metric name}}".
+        If the row header only contains name of sector, try to find the metric name (e.g., "Operating Income") in the upper row header.
+        Same metric broken down into different sectors or segments should be extracted as distinct metrics.
+        (e.g., "Revenue" in row header and "Food & Beverage" in lower row header -> "Food & Beverage Revenue")
 4.  **Determine the Type:**
     *   If the KPI represents a past result or performance that has already occurred, classify it as "actual".
     *   If the KPI represents a future expectation, projection, guidance, forecast, or outlook, classify it as "expected". 
