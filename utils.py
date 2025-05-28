@@ -273,34 +273,87 @@ def parse_html_table_to_csv(raw_html: str) -> str:
 
     for row in table.find_all("tr"):
         row_data = []
-        for cell in row.find_all(["td", "th"]):
+        for idx, cell in enumerate(row.find_all(["td", "th"])):
             # Get text with indentation preserved
             text = cell.get_text(strip=False)
             
             # Extract indentation from style attribute if available
             indent_px = 0
+            # Try to get style from <td> or from its first <p> child if not present
             style = cell.get("style", "")
+            if not style:
+                # Check if the cell contains a <p> tag with style
+                p_tag = cell.find("p")
+                if p_tag and p_tag.has_attr("style"):
+                    style = p_tag["style"]
             if style:
-                # Look for padding-left or padding values in the style
-                padding_match = re.search(r'padding:.*?(\d+(?:\.\d+)?)(pt|px).*?;', style)
-                if not padding_match:
-                    padding_match = re.search(r'padding-left:.*?(\d+(?:\.\d+)?)(pt|px)', style)
+                # Look for various padding patterns
+                padding_patterns = [
+                    r'padding-left:\s*(-?\d+(?:\.\d+)?)(pt|px|em|rem)',
+                    r'padding:\s*(-?\d+(?:\.\d+)?)(?:pt|px|em|rem)?\s+(-?\d+(?:\.\d+)?)(?:pt|px|em|rem)?\s+(-?\d+(?:\.\d+)?)(?:pt|px|em|rem)?\s+(-?\d+(?:\.\d+)?)(?:pt|px|em|rem)?',  # padding: top right bottom left
+                    r'padding:\s*(-?\d+(?:\.\d+)?)(?:pt|px|em|rem)?\s+(-?\d+(?:\.\d+)?)(?:pt|px|em|rem)?',  # padding: vertical horizontal
+                ]
                 
-                if padding_match:
-                    value = float(padding_match.group(1))
-                    unit = padding_match.group(2)
-                    # Convert pt to px if needed (approximately)
-                    if unit == 'pt':
-                        value = value * 1.33
-                    indent_px = int(value)
+                for pattern in padding_patterns:
+                    padding_match = re.search(pattern, style)
+                    if padding_match:
+                        value = float(padding_match.group(1))
+                        unit = padding_match.group(2) if len(padding_match.groups()) > 1 else 'px'
+                        
+                        # Convert different units to approximate pixel values
+                        if unit == 'pt':
+                            value = value * 1.33  # 1pt ≈ 1.33px
+                        elif unit == 'em':
+                            value = value * 16    # 1em ≈ 16px (default font size)
+                        elif unit == 'rem':
+                            value = value * 16    # 1rem ≈ 16px (default font size)
+                        
+                        indent_px = int(value) if value > 0 else 0
+                        break
+                
+                # Also check for text-indent
+                if not indent_px:
+                    text_indent_match = re.search(r'text-indent:\s*(-?\d+(?:\.\d+)?)(pt|px|em|rem)', style)
+                    if text_indent_match:
+                        value = float(text_indent_match.group(1))
+                        unit = text_indent_match.group(2)
+                        
+                        if unit == 'pt':
+                            value = value * 1.33
+                        elif unit == 'em':
+                            value = value * 16
+                        elif unit == 'rem':
+                            value = value * 16
+                        
+                        indent_px = int(value) if value > 0 else 0
+                
+                # Check for margin-left
+                if not indent_px:
+                    margin_match = re.search(r'margin-left:\s*(-?\d+(?:\.\d+)?)(pt|px|em|rem)', style)
+                    if margin_match:
+                        value = float(margin_match.group(1))
+                        unit = margin_match.group(2)
+                        
+                        if unit == 'pt':
+                            value = value * 1.33
+                        elif unit == 'em':
+                            value = value * 16
+                        elif unit == 'rem':
+                            value = value * 16
+                        
+                        indent_px = int(value) if value > 0 else 0
             
             # Calculate leading spaces from the text as well
             leading_spaces = len(text) - len(text.lstrip())
             
-            # Use the larger of the two indentation values
-            effective_indent = max(leading_spaces, indent_px)  # Approximate conversion to space count
+            # Count HTML non-breaking spaces
+            nbsp_count = text.count('&nbsp;') + text.count('&#160;') + text.count('\u00a0')
             
-            if effective_indent > 0:
+            # Use the largest indentation value (convert px to approximate space count)
+            space_from_px = indent_px // 8 if indent_px > 0 else 0  # Approximate: 8px ≈ 1 space
+            effective_indent = max(leading_spaces, space_from_px, nbsp_count)
+            
+            if effective_indent > 0 and idx == 0:
                 text = "&nbsp;" * effective_indent + text.lstrip()
             else:
                 text = text.lstrip()
@@ -355,8 +408,8 @@ def parse_html_table_to_csv(raw_html: str) -> str:
             filtered_rows.append(row)
             continue
             
-        # Check if row has at least one non-empty cell
-        if any(cell and not any(c in cell for c in ['\ufeff', '\ufffd', " "]) for cell in cells):
+        # Check if row has at least one non-empty cell or row header is not empty
+        if any(cell and not any(c in cell for c in ['\ufeff', '\ufffd', " "]) for cell in cells) or cells[0] != "":
             filtered_rows.append(row)
     
     # Check for empty columns
@@ -529,3 +582,63 @@ def get_chunk(text: str, file_type: str) -> Dict[int, str]:
             chunks[idx] = line
         return chunks
 
+
+
+def extract_table_with_preceding_text(html_content: str) -> list:
+    """
+    HTML에서 테이블과 그 앞에 있는 연속된 텍스트를 함께 추출합니다.
+    
+    Args:
+        html_content: HTML 문자열
+        
+    Returns:
+        list: 각 요소는 {'content': '텍스트+테이블', 'table_only': '테이블만'} 형태
+    """
+    soup = BeautifulSoup(html_content, 'html.parser')
+    
+    # 모든 요소를 순서대로 가져오기
+    all_elements = soup.find_all(['p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'table'])
+    
+    result_chunks = []
+    current_text_elements = []
+    
+    for element in all_elements:
+        if element.name == 'table':
+            # 테이블을 발견했을 때
+            preceding_text = ""
+            
+            # 앞에 쌓인 텍스트 요소들을 합치기
+            for text_elem in current_text_elements:
+                text_content = text_elem.get_text(strip=True)
+                if text_content:  # 빈 텍스트가 아닌 경우만
+                    preceding_text += text_content + "\n"
+            
+            # 테이블 HTML 추출
+            table_html = str(element)
+            table_html = parse_html_table_to_csv(table_html)
+            
+            # 텍스트와 테이블을 합친 청크 생성
+            combined_content = preceding_text.strip()
+            if combined_content:
+                combined_content += "\n\n" + table_html
+            else:
+                combined_content = table_html
+            
+            result_chunks.append({
+                'content': combined_content,
+                'table_only': table_html,
+                'preceding_text': preceding_text.strip()
+            })
+            
+            # 텍스트 요소 리스트 초기화
+            current_text_elements = []
+            
+        else:
+            # 텍스트 요소인 경우 (p, div, h1-h6 등)
+            text_content = element.get_text(strip=True)
+            if text_content:  # 빈 텍스트가 아닌 경우만 추가
+                current_text_elements.append(element)
+            else:
+                current_text_elements = []
+    
+    return result_chunks
