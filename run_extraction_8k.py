@@ -13,7 +13,7 @@ from fetch import (
     _fetch_table_data_cellwise,
 )
 from tqdm.asyncio import tqdm
-from utils import parse_html_table_to_csv
+from utils import parse_html_table_to_csv, extract_table_with_preceding_text
 
 
 def async_limit(max_concurrent:int=2):
@@ -53,28 +53,26 @@ async def process_data(company_name: str, input_file: str, output_file: str, qua
     # 1단계: 테이블에서 metric 리스트 추출
     row_extraction_tasks = []
     metrics_by_table_index = {}  # 테이블 인덱스 별 metrics 저장
-    # INSERT_YOUR_CODE
-    # input_file에서 .json 말고 .html로 읽은 다음에 table 태그 달린 것만 가져오고싶어
 
     # HTML 파일 읽기
     input_file = input_file.replace('.json', '.html')
     with open(input_file, 'r', encoding='utf-8') as f:
         html_content = f.read()
 
-    # table 태그가 포함된 부분만 추출
-    import re
-    table_chunks = re.findall(r'(<table.*?>.*?</table>)', html_content, re.DOTALL | re.IGNORECASE)
+    # 테이블과 앞의 텍스트를 함께 추출
+    table_chunks_with_text = extract_table_with_preceding_text(html_content)
 
-    # data를 table 태그가 달린 부분만으로 재구성
+    # data를 테이블+텍스트 청크로 재구성
     data = []
-    for chunk in table_chunks:
-        data.append({'content': chunk})
+    for chunk_info in table_chunks_with_text:
+        data.append({'content': chunk_info['content']})
+        
     for i, item in enumerate(data):
         if 'content' in item and "<table" in item['content']:
-            parsed_csv = parse_html_table_to_csv(item['content'])
+            # 테이블만 추출해서 CSV로 변환 (parsing용)
             temp_table_data = {
                 "index": i,
-                "reference": parsed_csv
+                "reference": item['content']
             }
             row_extraction_tasks.append(_fetch_table_data_rowwise(temp_table_data, company_name, quarter))
             metrics_by_table_index[i] = []  # 빈 리스트로 초기화
@@ -93,11 +91,12 @@ async def process_data(company_name: str, input_file: str, output_file: str, qua
     for table_idx, metrics in metrics_by_table_index.items():
         for metric in metrics:
             # 테이블 데이터에서 추출된 metric에 대해 cell 값 추출 작업 생성
-            original_table_data = next((item['content'] for i, item in enumerate(data) if i == table_idx and 'content' in item), "")
+            # 테이블만 사용해서 CSV로 변환 (cell 추출용)
+            content = table_chunks_with_text[table_idx]['content']
             metric_with_reference = {
                 **metric,
                 "index": table_idx,
-                "reference": parse_html_table_to_csv(original_table_data)
+                "reference": content
             }
             cell_extraction_tasks.append(_fetch_table_data_cellwise(metric_with_reference, company_name, quarter))
     

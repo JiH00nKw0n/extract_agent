@@ -582,3 +582,63 @@ def get_chunk(text: str, file_type: str) -> Dict[int, str]:
             chunks[idx] = line
         return chunks
 
+
+
+def extract_table_with_preceding_text(html_content: str) -> list:
+    """
+    HTML에서 테이블과 그 앞에 있는 연속된 텍스트를 함께 추출합니다.
+    
+    Args:
+        html_content: HTML 문자열
+        
+    Returns:
+        list: 각 요소는 {'content': '텍스트+테이블', 'table_only': '테이블만'} 형태
+    """
+    soup = BeautifulSoup(html_content, 'html.parser')
+    
+    # 모든 요소를 순서대로 가져오기
+    all_elements = soup.find_all(['p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'table'])
+    
+    result_chunks = []
+    current_text_elements = []
+    
+    for element in all_elements:
+        if element.name == 'table':
+            # 테이블을 발견했을 때
+            preceding_text = ""
+            
+            # 앞에 쌓인 텍스트 요소들을 합치기
+            for text_elem in current_text_elements:
+                text_content = text_elem.get_text(strip=True)
+                if text_content:  # 빈 텍스트가 아닌 경우만
+                    preceding_text += text_content + "\n"
+            
+            # 테이블 HTML 추출
+            table_html = str(element)
+            table_html = parse_html_table_to_csv(table_html)
+            
+            # 텍스트와 테이블을 합친 청크 생성
+            combined_content = preceding_text.strip()
+            if combined_content:
+                combined_content += "\n\n" + table_html
+            else:
+                combined_content = table_html
+            
+            result_chunks.append({
+                'content': combined_content,
+                'table_only': table_html,
+                'preceding_text': preceding_text.strip()
+            })
+            
+            # 텍스트 요소 리스트 초기화
+            current_text_elements = []
+            
+        else:
+            # 텍스트 요소인 경우 (p, div, h1-h6 등)
+            text_content = element.get_text(strip=True)
+            if text_content:  # 빈 텍스트가 아닌 경우만 추가
+                current_text_elements.append(element)
+            else:
+                current_text_elements = []
+    
+    return result_chunks
