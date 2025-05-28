@@ -68,7 +68,7 @@ async def process_data(company_name: str, input_file: str, output_file: str, qua
         data.append({'content': chunk_info['content']})
         
     for i, item in enumerate(data):
-        if 'content' in item and "<table" in item['content']:
+        if 'content' in item:
             # 테이블만 추출해서 CSV로 변환 (parsing용)
             temp_table_data = {
                 "index": i,
