@@ -12,7 +12,7 @@ from openai.types.chat import ChatCompletionChunk as OpenAIChatCompletionChunk
 from openai.types.chat import ParsedChatCompletion as OpenAIParsedChatCompletion
 from pydantic import BaseModel
 
-from utils import retry_fetch
+from src.utils import retry_fetch
 
 BaseModelType = Type[BaseModel]
 

@@ -1,11 +1,12 @@
 earnings_sample/*
 result/*
 misc/*
-.env
+*/.env
 .idea/*
 annotations/*
 8-k_sample/*
 *.json
 *.csv
 *.htm
-test5.py
+test*.py
+download*.py
